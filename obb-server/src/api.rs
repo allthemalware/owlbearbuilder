@@ -25,15 +25,18 @@
 //! Table: `POST /api/target` accepts `{"dc": integer|null}`. Token binding: `POST /api/token`
 //! accepts `{"actor": id}` and returns that actor's token metadata.
 //!
-//! Rolls (`POST /api/roll`), initiative (`POST /api/initiative`), and spell areas (`POST
-//! /api/aoe/compute` and `/api/aoe/clear`) are reserved for later routes and currently return
-//! 404.
+//! Rolls: `POST /api/roll` rolls checks, strikes, damage, expressions, and party secret checks;
+//! each result is added to the capped roll log. Initiative: `POST /api/initiative` manages
+//! combatants and turns. Spell areas: `POST /api/aoe/compute` computes an Owlbear area item from
+//! a spell, description, or area object, and optionally saves it; `/api/aoe/clear` removes saved
+//! templates.
 use crate::{
     assets,
     http::{self, Handler, Reply, Request, Response, RunningServer},
     state::RoomState,
 };
 use obb_core::{
+    aoe::{self, SpellArea},
     bestiary::{CreatureVariant, MonsterInstance},
     bestiary_data, conditions, encounter, fs, import,
     json::JsonValue,
@@ -208,6 +211,10 @@ impl App {
                 | "/api/monster/remove"
                 | "/api/target"
                 | "/api/token"
+                | "/api/roll"
+                | "/api/initiative"
+                | "/api/aoe/compute"
+                | "/api/aoe/clear"
         );
 
         if (r.method == "GET" && post_route) || (r.method == "POST" && get_route) {
@@ -414,6 +421,37 @@ impl App {
                         return Err((404, "unknown actor".into()));
                     }
                 }
+                "/api/roll" => {
+                    let mut rng = self.rng.lock().unwrap_or_else(PoisonError::into_inner);
+                    let (value, entries) = roll_request(&mut s, &body, &mut rng)?;
+                    for entry in entries {
+                        s.push_roll(entry);
+                    }
+                    changed = true;
+                    value
+                }
+                "/api/initiative" => {
+                    let mut rng = self.rng.lock().unwrap_or_else(PoisonError::into_inner);
+                    let value = initiative_request(&mut s, &body, &mut rng)?;
+                    changed = true;
+                    value
+                }
+                "/api/aoe/compute" => {
+                    let (value, keep) = aoe_request(&body)?;
+                    if keep {
+                        s.aoe_templates.push(value.clone());
+                        changed = true;
+                    }
+                    value
+                }
+                "/api/aoe/clear" => {
+                    let count = s.aoe_templates.len();
+                    s.aoe_templates.clear();
+                    changed = count > 0;
+                    let mut value = JsonValue::object();
+                    value.insert("cleared", count as i64);
+                    value
+                }
                 _ => return Err((404, "unknown route".into())),
             })
         })();
@@ -593,6 +631,556 @@ fn character_token(c: &obb_core::character::CharacterSheet) -> JsonValue {
     t
 }
 
+fn roll_request(
+    state: &mut RoomState,
+    body: &JsonValue,
+    rng: &mut obb_core::dice::Rng,
+) -> Result<(JsonValue, Vec<JsonValue>), (u16, String)> {
+    let kind = str_field(body, "kind")?;
+    if kind == "party" {
+        let name = str_field(body, "name")?;
+        let dc = num(body, "dc").or(state.target_dc);
+        let outcomes = encounter::roll_party_secret_check(&state.characters, name, dc, rng)
+            .map_err(|e| (400, e))?;
+        let entries: Vec<JsonValue> = outcomes
+            .iter()
+            .map(|outcome| {
+                roll_json(
+                    RollFields {
+                        actor: &outcome.id,
+                        actor_name: &outcome.name,
+                        label: name,
+                        expr: &outcome.roll.expr,
+                        total: outcome.total,
+                        modifier: Some(outcome.modifier),
+                        dc,
+                        degree: outcome.degree.map(|degree| degree.id()),
+                        secret: true,
+                    },
+                    &outcome.roll,
+                )
+            })
+            .collect();
+        let mut value = JsonValue::object();
+        value.insert("results", JsonValue::Array(entries.clone()));
+        return Ok((value, entries));
+    }
+
+    let actor_id = str_field(body, "actor")?;
+    let character = state.characters.iter().find(|c| c.id == actor_id);
+    let monster = state.monsters.iter().find(|m| m.instance_id == actor_id);
+    if character.is_none() && monster.is_none() {
+        return Err((404, "unknown actor".into()));
+    }
+    let actor_name = character.map_or_else(|| monster.unwrap().label.clone(), |c| c.name.clone());
+    let secret = body.get_bool("secret").unwrap_or(false);
+    let dc = num(body, "dc").or(state.target_dc);
+    let index = body.get_i64("index").unwrap_or(0);
+    if index < 0 {
+        return Err((400, "index must be non-negative".into()));
+    }
+    let map = body.get_i64("map").unwrap_or(0).clamp(0, 2) as u8;
+    let critical = body.get_bool("critical").unwrap_or(false);
+    let (label, expr, result, total, modifier, natural) = match kind {
+        "expr" => {
+            let expr = str_field(body, "expr")?;
+            let result = obb_core::dice::roll_expr(expr, rng).map_err(|e| (400, e))?;
+            (
+                expr.to_string(),
+                result.expr.clone(),
+                Some(result.clone()),
+                result.total,
+                None,
+                result.natural_d20,
+            )
+        }
+        "perception" | "save" | "skill" | "assurance" | "spell" => {
+            let name = body.get_str("name").unwrap_or("");
+            let (label, modifier, assurance) = if let Some(c) = character {
+                match kind {
+                    "perception" => ("Perception".to_string(), c.perception_modifier(), false),
+                    "save" => {
+                        let save = obb_core::character::Save::parse(name)
+                            .ok_or((400, "unknown save".into()))?;
+                        (
+                            format!("{} save", save.label()),
+                            c.save_modifier(save),
+                            false,
+                        )
+                    }
+                    "skill" => {
+                        let modifier = c
+                            .skill_modifier(name)
+                            .ok_or((400, "unknown skill".into()))?;
+                        let label = obb_core::character::Skill::parse(name).map_or_else(
+                            || {
+                                c.lores
+                                    .iter()
+                                    .find(|l| {
+                                        l.name.eq_ignore_ascii_case(name)
+                                            || format!("{} lore", l.name).eq_ignore_ascii_case(name)
+                                    })
+                                    .map(|l| format!("{} Lore", l.name))
+                                    .unwrap_or_else(|| name.to_string())
+                            },
+                            |skill| skill.label().to_string(),
+                        );
+                        (label, modifier, false)
+                    }
+                    "assurance" => {
+                        let total = c
+                            .assurance_total(name)
+                            .ok_or((400, "unknown skill".into()))?;
+                        let skill_label = obb_core::character::Skill::parse(name).map_or_else(
+                            || {
+                                c.lores
+                                    .iter()
+                                    .find(|l| {
+                                        l.name.eq_ignore_ascii_case(name)
+                                            || format!("{} lore", l.name).eq_ignore_ascii_case(name)
+                                    })
+                                    .map(|l| format!("{} Lore", l.name))
+                                    .unwrap_or_else(|| name.to_string())
+                            },
+                            |skill| skill.label().to_string(),
+                        );
+                        (assurance_label(&skill_label), total, true)
+                    }
+                    _ => {
+                        let slot = index as usize;
+                        let spell = c
+                            .spellcasting
+                            .get(slot)
+                            .ok_or((400, "unknown spellcasting entry".into()))?;
+                        let modifier = c
+                            .spell_attack_modifier(slot)
+                            .ok_or((400, "unknown spellcasting entry".into()))?;
+                        (format!("{} spell attack", spell.name), modifier, false)
+                    }
+                }
+            } else {
+                let m = monster.unwrap();
+                if kind == "assurance" || kind == "spell" {
+                    return Err((400, "unsupported roll for monster".into()));
+                }
+                match kind {
+                    "perception" => ("Perception".to_string(), m.perception_modifier(), false),
+                    "save" => {
+                        let save = obb_core::character::Save::parse(name)
+                            .ok_or((400, "unknown save".into()))?;
+                        (
+                            format!("{} save", save.label()),
+                            m.save_modifier(save),
+                            false,
+                        )
+                    }
+                    _ => (
+                        name.to_string(),
+                        m.skill_modifier(name)
+                            .ok_or((400, "unknown skill".into()))?,
+                        false,
+                    ),
+                }
+            };
+            if assurance {
+                (label, String::new(), None, modifier, Some(modifier), None)
+            } else {
+                let expr = format!("1d20{modifier:+}");
+                let result = obb_core::dice::roll_expr(&expr, rng).map_err(|e| (400, e))?;
+                (
+                    label,
+                    result.expr.clone(),
+                    Some(result.clone()),
+                    result.total,
+                    Some(modifier),
+                    result.natural_d20,
+                )
+            }
+        }
+        "strike" | "damage" => {
+            let strike_index = index as usize;
+            let strike_name;
+            if let Some(c) = character {
+                let strike = c
+                    .strikes
+                    .get(strike_index)
+                    .ok_or((400, "unknown strike".into()))?;
+                strike_name = strike.name.clone();
+                if kind == "strike" {
+                    let modifier = c
+                        .strike_attack_modifier(strike_index, map)
+                        .ok_or((400, "unknown strike".into()))?;
+                    let label = attack_label(&strike.name, map);
+                    let expr = format!("1d20{modifier:+}");
+                    let result = obb_core::dice::roll_expr(&expr, rng).map_err(|e| (400, e))?;
+                    (
+                        label,
+                        result.expr.clone(),
+                        Some(result.clone()),
+                        result.total,
+                        Some(modifier),
+                        result.natural_d20,
+                    )
+                } else {
+                    let damage = c
+                        .strike_damage(strike_index)
+                        .ok_or((400, "unknown strike".into()))?;
+                    let expr = format!(
+                        "{}d{}{:+}",
+                        damage.dice_count, damage.die_sides, damage.flat_bonus
+                    );
+                    let result = damage.roll(critical, rng);
+                    let label = damage_label(&strike_name, critical);
+                    (label, expr, None, result.total, None, None)
+                }
+            } else {
+                let m = monster.unwrap();
+                let stats = m.stats();
+                let strike = stats
+                    .strikes
+                    .get(strike_index)
+                    .ok_or((400, "unknown strike".into()))?;
+                strike_name = strike.name.clone();
+                if kind == "strike" {
+                    let modifier = m
+                        .strike_attack_modifier(strike_index, map)
+                        .ok_or((400, "unknown strike".into()))?;
+                    let label = attack_label(&strike.name, map);
+                    let expr = format!("1d20{modifier:+}");
+                    let result = obb_core::dice::roll_expr(&expr, rng).map_err(|e| (400, e))?;
+                    (
+                        label,
+                        result.expr.clone(),
+                        Some(result.clone()),
+                        result.total,
+                        Some(modifier),
+                        result.natural_d20,
+                    )
+                } else {
+                    let expr = m
+                        .strike_damage_expr(strike_index)
+                        .ok_or((400, "unknown strike".into()))?;
+                    let result = obb_core::dice::roll_expr(&expr, rng).map_err(|e| (400, e))?;
+                    let total = if critical {
+                        result.total.saturating_mul(2).max(1)
+                    } else {
+                        result.total.max(1)
+                    };
+                    let label = damage_label(&strike_name, critical);
+                    (label, expr, Some(result), total, None, None)
+                }
+            }
+        }
+        _ => return Err((400, "unknown roll kind".into())),
+    };
+    let degree = dc
+        .zip(natural)
+        .map(|(dc, natural)| obb_core::dice::evaluate_check(total, dc, Some(natural)).id());
+    let entry = if let Some(result) = result {
+        roll_json(
+            RollFields {
+                actor: actor_id,
+                actor_name: &actor_name,
+                label: &label,
+                expr: &expr,
+                total,
+                modifier,
+                dc,
+                degree,
+                secret,
+            },
+            &result,
+        )
+    } else {
+        let mut entry = JsonValue::object();
+        entry.insert("actor", actor_id);
+        entry.insert("actor_name", actor_name.as_str());
+        entry.insert("label", label.as_str());
+        entry.insert("expr", expr.as_str());
+        entry.insert("total", total);
+        entry.insert(
+            "modifier",
+            modifier.map_or(JsonValue::Null, JsonValue::from),
+        );
+        entry.insert("rolls", JsonValue::Array(Vec::new()));
+        entry.insert("natural", JsonValue::Null);
+        entry.insert("dc", dc.map_or(JsonValue::Null, JsonValue::from));
+        entry.insert("degree", degree.map_or(JsonValue::Null, JsonValue::from));
+        entry.insert("secret", secret);
+        entry
+    };
+    Ok((entry.clone(), vec![entry]))
+}
+
+fn attack_label(name: &str, map: u8) -> String {
+    match map {
+        0 => name.to_string(),
+        1 => format!("{name} (2nd attack)"),
+        _ => format!("{name} (3rd attack)"),
+    }
+}
+
+fn damage_label(name: &str, critical: bool) -> String {
+    format!("{name} damage{}", if critical { " (critical)" } else { "" })
+}
+
+fn assurance_label(skill: &str) -> String {
+    format!("Assurance ({skill})")
+}
+
+struct RollFields<'a> {
+    actor: &'a str,
+    actor_name: &'a str,
+    label: &'a str,
+    expr: &'a str,
+    total: i32,
+    modifier: Option<i32>,
+    dc: Option<i32>,
+    degree: Option<&'a str>,
+    secret: bool,
+}
+
+fn roll_json(fields: RollFields<'_>, result: &obb_core::dice::RollResult) -> JsonValue {
+    let mut entry = JsonValue::object();
+    entry.insert("actor", fields.actor);
+    entry.insert("actor_name", fields.actor_name);
+    entry.insert("label", fields.label);
+    entry.insert("expr", fields.expr);
+    entry.insert("total", fields.total);
+    entry.insert(
+        "modifier",
+        fields.modifier.map_or(JsonValue::Null, JsonValue::from),
+    );
+    entry.insert(
+        "rolls",
+        JsonValue::Array(
+            result
+                .terms
+                .iter()
+                .flat_map(|term| term.rolls.iter().copied().map(JsonValue::from))
+                .collect(),
+        ),
+    );
+    entry.insert(
+        "natural",
+        result
+            .natural_d20
+            .map_or(JsonValue::Null, |n| JsonValue::from(u32::from(n))),
+    );
+    entry.insert("dc", fields.dc.map_or(JsonValue::Null, JsonValue::from));
+    entry.insert(
+        "degree",
+        fields.degree.map_or(JsonValue::Null, JsonValue::from),
+    );
+    entry.insert("secret", fields.secret);
+    entry
+}
+
+fn initiative_request(
+    state: &mut RoomState,
+    body: &JsonValue,
+    rng: &mut obb_core::dice::Rng,
+) -> Result<JsonValue, (u16, String)> {
+    let action = str_field(body, "action")?;
+    let mut transition = JsonValue::Null;
+    match action {
+        "add" => {
+            let actor_id = str_field(body, "actor")?;
+            let (name, is_player, token_id) =
+                if let Some(c) = state.characters.iter().find(|c| c.id == actor_id) {
+                    (c.name.clone(), true, c.linked_token_id.clone())
+                } else if let Some(m) = state.monsters.iter().find(|m| m.instance_id == actor_id) {
+                    (m.label.clone(), false, m.linked_token_id.clone())
+                } else {
+                    return Err((404, "unknown actor".into()));
+                };
+            let mut combatant = encounter::Combatant::new(actor_id, actor_id, &name, is_player);
+            combatant.token_id = token_id;
+            state
+                .encounter
+                .add_combatant(combatant)
+                .map_err(|e| (400, e))?;
+            if body.get_bool("roll") == Some(true) {
+                roll_initiative(
+                    state,
+                    actor_id,
+                    body.get_str("check").unwrap_or("perception"),
+                    rng,
+                )?;
+            }
+        }
+        "roll" => {
+            let id = str_field(body, "combatant")?;
+            roll_initiative(
+                state,
+                id,
+                body.get_str("check").unwrap_or("perception"),
+                rng,
+            )?;
+        }
+        "set" => {
+            let id = str_field(body, "combatant")?;
+            let total = num(body, "total").ok_or((400, "total must be an integer".into()))?;
+            let source = body.get_str("source").unwrap_or("GM set");
+            state
+                .encounter
+                .set_initiative(id, total, 0, source)
+                .map_err(|e| (404, e))?;
+        }
+        "delay" => {
+            let id = str_field(body, "combatant")?;
+            let total =
+                num(body, "initiative").ok_or((400, "initiative must be an integer".into()))?;
+            state
+                .encounter
+                .delay_combatant(id, total)
+                .map_err(|e| (404, e))?;
+        }
+        "start" => {
+            let t = state.encounter.start().map_err(|e| (400, e))?;
+            transition = transition_json(&t);
+        }
+        "next" => {
+            let mut actors: Vec<&mut dyn encounter::Actor> = Vec::new();
+            actors.extend(
+                state
+                    .characters
+                    .iter_mut()
+                    .map(|c| c as &mut dyn encounter::Actor),
+            );
+            actors.extend(
+                state
+                    .monsters
+                    .iter_mut()
+                    .map(|m| m as &mut dyn encounter::Actor),
+            );
+            let t = state.encounter.next_turn(&mut actors);
+            transition = transition_json(&t);
+        }
+        "end" => state.encounter.end(),
+        "clear" => {
+            state.encounter = encounter::EncounterTracker::new();
+        }
+        _ => return Err((400, "unknown initiative action".into())),
+    }
+    let mut value = JsonValue::object();
+    value.insert("encounter", state.encounter.to_json());
+    value.insert("transition", transition);
+    Ok(value)
+}
+
+fn roll_initiative(
+    state: &mut RoomState,
+    combatant_id: &str,
+    check: &str,
+    rng: &mut obb_core::dice::Rng,
+) -> Result<(), (u16, String)> {
+    let combatant = state
+        .encounter
+        .combatants
+        .iter()
+        .find(|c| c.combatant_id == combatant_id)
+        .ok_or((404, "unknown combatant".into()))?;
+    let actor_id = combatant.actor_id.clone();
+    if let Some(sheet) = state.characters.iter().find(|c| c.id == actor_id) {
+        state
+            .encounter
+            .roll_initiative_for_character(combatant_id, sheet, check, rng)
+            .map(|_| ())
+            .map_err(|e| (400, e))
+    } else if let Some(monster) = state.monsters.iter().find(|m| m.instance_id == actor_id) {
+        let modifier = if check.eq_ignore_ascii_case("perception") {
+            Some(monster.perception_modifier())
+        } else {
+            monster.skill_modifier(check)
+        }
+        .ok_or((400, "unknown initiative check".into()))?;
+        let source = format!(
+            "{} ({modifier:+})",
+            if check.eq_ignore_ascii_case("perception") {
+                "Perception"
+            } else {
+                check
+            }
+        );
+        let result =
+            obb_core::dice::roll_expr(&format!("1d20{modifier:+}"), rng).map_err(|e| (400, e))?;
+        state
+            .encounter
+            .set_initiative(combatant_id, result.total, modifier, &source)
+            .map_err(|e| (404, e))
+    } else {
+        Err((404, "unknown actor".into()))
+    }
+}
+
+fn transition_json(t: &encounter::TurnTransition) -> JsonValue {
+    let mut value = JsonValue::object();
+    value.insert(
+        "ended",
+        t.ended.clone().map_or(JsonValue::Null, JsonValue::from),
+    );
+    value.insert(
+        "started",
+        t.started.clone().map_or(JsonValue::Null, JsonValue::from),
+    );
+    value.insert("round", i64::from(t.round));
+    value.insert("new_round", t.new_round);
+    value
+}
+
+fn aoe_request(body: &JsonValue) -> Result<(JsonValue, bool), (u16, String)> {
+    let origin = body
+        .get("origin")
+        .ok_or((400, "origin is required".into()))?;
+    let x = origin
+        .get("x")
+        .and_then(JsonValue::as_f64)
+        .ok_or((400, "origin.x must be a number".into()))?;
+    let y = origin
+        .get("y")
+        .and_then(JsonValue::as_f64)
+        .ok_or((400, "origin.y must be a number".into()))?;
+    let mut spell_value = JsonValue::Null;
+    let area = if let Some(name) = body.get_str("spell") {
+        let rank = body.get_i64("rank").unwrap_or(0);
+        if !(0..=10).contains(&rank) {
+            return Err((400, "rank must be 0 through 10".into()));
+        }
+        let spell =
+            spells::lookup_common_spell(name, rank as u8).ok_or((404, "unknown spell".into()))?;
+        let area = spell
+            .area
+            .clone()
+            .ok_or((400, "spell has no area".into()))?;
+        spell_value = spell.to_json();
+        area
+    } else if let Some(text) = body.get_str("text") {
+        aoe::parse_area_description(text).ok_or((400, "invalid area description".into()))?
+    } else if let Some(value) = body.get("area") {
+        SpellArea::from_json(value).map_err(|e| (400, e))?
+    } else {
+        return Err((400, "spell, text, or area is required".into()));
+    };
+    let label = body
+        .get_str("label")
+        .map(str::to_owned)
+        .or_else(|| spell_value.get_str("name").map(str::to_owned))
+        .unwrap_or_else(|| area.label());
+    let color = body.get_str("color").unwrap_or("#ff0000");
+    let grid_dpi = body
+        .get("grid_dpi")
+        .and_then(JsonValue::as_f64)
+        .unwrap_or(100.0);
+    let size = body.get_i64("token_size_squares").unwrap_or(1).max(1) as u32;
+    let mut result = aoe::compute_obr_aoe_item(&area, x, y, grid_dpi, size, color, &label);
+    result.insert("label", label.as_str());
+    result.insert("fill_color", color);
+    result.insert("spell", spell_value);
+    let keep = body.get_bool("keep").unwrap_or(false);
+    Ok((result, keep))
+}
+
 pub fn start(
     bind: &str,
     state_file: Option<PathBuf>,
@@ -615,4 +1203,21 @@ pub fn start(
         ),
     });
     http::serve(bind, app).map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{assurance_label, attack_label, damage_label};
+
+    #[test]
+    fn roll_labels_show_attack_order_and_critical_damage() {
+        assert_eq!(attack_label("Strike", 1), "Strike (2nd attack)");
+        assert_eq!(attack_label("Strike", 2), "Strike (3rd attack)");
+        assert_eq!(damage_label("Strike", true), "Strike damage (critical)");
+    }
+
+    #[test]
+    fn assurance_label_names_the_skill() {
+        assert_eq!(assurance_label("Athletics"), "Assurance (Athletics)");
+    }
 }
