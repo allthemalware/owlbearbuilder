@@ -218,7 +218,7 @@ fn inspect(path: &std::path::Path) -> Result<(), String> {
     for save in Save::ALL {
         println!("{} {:+}", save.label(), c.save_modifier(save));
     }
-    println!("Class DC {:+}", c.class_dc());
+    println!("Class DC {}", c.class_dc());
     for (i, s) in c.strikes.iter().enumerate() {
         let a = c.strike_attack_modifier(i, 0).unwrap_or(s.attack_bonus);
         let b = c.strike_attack_modifier(i, 1).unwrap_or(a);
@@ -231,26 +231,54 @@ fn inspect(path: &std::path::Path) -> Result<(), String> {
     for skill in obb_core::character::Skill::ALL {
         if let Some(rank) = c.skill_rank(skill.label()) {
             if rank != obb_core::character::ProfRank::Untrained {
-                println!("{} ({})", skill.label(), rank.label());
+                println!(
+                    "{} {:+} ({})",
+                    skill.label(),
+                    c.skill_modifier(skill.id()).unwrap_or(0),
+                    rank.label()
+                );
             }
         }
     }
     for lore in &c.lores {
-        println!("{} Lore ({})", lore.name, lore.rank.label());
+        println!(
+            "{} Lore {:+} ({})",
+            lore.name,
+            c.skill_modifier(&lore.name).unwrap_or(0),
+            lore.rank.label()
+        );
     }
-    for known in spellbook(&c) {
-        if let Some(detail) = known.details {
-            let area = detail
-                .area
-                .map(|a| format!(" — {}", a.label()))
-                .unwrap_or_default();
-            let damage = detail
-                .damage_expr
-                .map(|d| format!(" — {d} {}", detail.damage_type.unwrap_or_default()))
-                .unwrap_or_default();
-            println!("{}{}{} (rank {})", known.name, area, damage, detail.rank);
-        } else {
-            println!("{}", known.name);
+    let spells = spellbook(&c);
+    for (index, entry) in c.spellcasting.iter().enumerate() {
+        println!(
+            "{} ({} {}, DC {}, attack {:+})",
+            entry.name,
+            entry.tradition,
+            entry.kind,
+            c.spell_dc(index).unwrap_or(10),
+            c.spell_attack_modifier(index).unwrap_or(0)
+        );
+        for known in spells.iter().filter(|known| known.entry == index) {
+            if let Some(detail) = &known.details {
+                let area = detail
+                    .area
+                    .as_ref()
+                    .map(|a| format!(" — {}", a.label()))
+                    .unwrap_or_default();
+                let damage = detail
+                    .damage_expr
+                    .as_ref()
+                    .map(|d| {
+                        format!(
+                            " — {d} {}",
+                            detail.damage_type.as_deref().unwrap_or_default()
+                        )
+                    })
+                    .unwrap_or_default();
+                println!("  {}{}{} (rank {})", known.name, area, damage, detail.rank);
+            } else {
+                println!("  {}", known.name);
+            }
         }
     }
     Ok(())
@@ -287,11 +315,25 @@ fn monster(
 fn roll(expr: &str, dc: Option<i32>, seed: Option<u64>) -> Result<(), String> {
     let mut rng = seed.map_or_else(obb_core::dice::Rng::from_os, obb_core::dice::Rng::from_seed);
     let r = obb_core::dice::roll_expr(expr, &mut rng)?;
-    println!("{}", r.expr);
-    for t in r.terms {
-        println!("{}d{}: {:?} = {:+}", t.count, t.sides, t.rolls, t.subtotal);
+    let mut pieces = Vec::new();
+    for t in &r.terms {
+        for die in &t.rolls {
+            pieces.push((i32::try_from(*die).unwrap_or(i32::MAX) * t.sign).to_string());
+        }
     }
-    println!("Total: {}", r.total);
+    if r.flat_modifier != 0 || pieces.is_empty() {
+        pieces.push(r.flat_modifier.to_string());
+    }
+    let mut line = format!("{}: {} = {}", r.expr, pieces.join(" + "), r.total);
+    if let Some(natural) = r.natural_d20 {
+        if natural == 20 {
+            line.push_str(" (natural 20)");
+        }
+        if natural == 1 {
+            line.push_str(" (natural 1)");
+        }
+    }
+    println!("{line}");
     if let Some(dc) = dc {
         println!(
             "DC {dc}: {}",
