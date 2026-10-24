@@ -1,0 +1,5 @@
+/target
+*.tmp
+*.bak
+.DS_Store
+owlbearbuilder-room.json
