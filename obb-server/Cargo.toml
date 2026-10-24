@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+[package]
+name = "obb-server"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-or-later"
+default-run = "owlbearbuilder"
+
+[[bin]]
+name = "owlbearbuilder"
+path = "src/main.rs"
+
+[dependencies]
+obb-core = { path = "../obb-core" }
