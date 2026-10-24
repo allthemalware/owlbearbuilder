@@ -1,0 +1,14 @@
+{
+  "name": "OwlbearBuilder",
+  "version": "0.1.0",
+  "manifest_version": 1,
+  "author": "OwlbearBuilder",
+  "description": "Pathbuilder 2e characters, creature stat blocks and spell areas for Pathfinder 2e tables.",
+  "action": {
+    "title": "OwlbearBuilder",
+    "icon": "icon.svg",
+    "popover": "index.html",
+    "width": 460,
+    "height": 680
+  }
+}
