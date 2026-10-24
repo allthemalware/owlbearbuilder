@@ -37,7 +37,7 @@ static WEAPONS: &[WeaponInfo] = &[
     },
     WeaponInfo {
         name: "Light Mace",
-        traits: &["agile", "shove"],
+        traits: &["agile", "finesse", "shove"],
         range_ft: None,
     },
     WeaponInfo {
@@ -52,17 +52,17 @@ static WEAPONS: &[WeaponInfo] = &[
     },
     WeaponInfo {
         name: "Morningstar",
-        traits: &[],
+        traits: &["versatile p"],
         range_ft: None,
     },
     WeaponInfo {
         name: "Sickle",
-        traits: &["agile", "trip"],
+        traits: &["agile", "finesse", "trip"],
         range_ft: None,
     },
     WeaponInfo {
         name: "Spear",
-        traits: &["thrown 20 ft", "versatile s"],
+        traits: &["thrown 20 ft"],
         range_ft: None,
     },
     WeaponInfo {
@@ -77,12 +77,12 @@ static WEAPONS: &[WeaponInfo] = &[
     },
     WeaponInfo {
         name: "Clan Dagger",
-        traits: &["agile", "parry", "versatile s"],
+        traits: &["agile", "parry", "versatile b"],
         range_ft: None,
     },
     WeaponInfo {
         name: "Katar",
-        traits: &["agile", "backstabber", "deadly d6", "monk"],
+        traits: &["agile", "deadly d6"],
         range_ft: None,
     },
     WeaponInfo {
@@ -97,7 +97,7 @@ static WEAPONS: &[WeaponInfo] = &[
     },
     WeaponInfo {
         name: "Bo Staff",
-        traits: &["blocking", "monk", "parry", "reach", "trip"],
+        traits: &["parry", "reach", "trip"],
         range_ft: None,
     },
     WeaponInfo {
@@ -142,7 +142,7 @@ static WEAPONS: &[WeaponInfo] = &[
     },
     WeaponInfo {
         name: "Halberd",
-        traits: &["versatile p"],
+        traits: &["reach", "versatile s"],
         range_ft: None,
     },
     WeaponInfo {
@@ -152,7 +152,7 @@ static WEAPONS: &[WeaponInfo] = &[
     },
     WeaponInfo {
         name: "Lance",
-        traits: &["jousting d6", "reach"],
+        traits: &["deadly d8", "jousting d6", "reach"],
         range_ft: None,
     },
     WeaponInfo {
@@ -172,12 +172,12 @@ static WEAPONS: &[WeaponInfo] = &[
     },
     WeaponInfo {
         name: "Main-gauche",
-        traits: &["agile", "disarm", "parry"],
+        traits: &["agile", "disarm", "finesse", "parry", "versatile s"],
         range_ft: None,
     },
     WeaponInfo {
         name: "Maul",
-        traits: &["backswing", "shove"],
+        traits: &["shove"],
         range_ft: None,
     },
     WeaponInfo {
@@ -212,7 +212,7 @@ static WEAPONS: &[WeaponInfo] = &[
     },
     WeaponInfo {
         name: "Shield Bash",
-        traits: &["shield"],
+        traits: &[],
         range_ft: None,
     },
     WeaponInfo {
@@ -232,7 +232,13 @@ static WEAPONS: &[WeaponInfo] = &[
     },
     WeaponInfo {
         name: "Starknife",
-        traits: &["agile", "deadly d6", "thrown 20 ft", "versatile s"],
+        traits: &[
+            "agile",
+            "deadly d6",
+            "finesse",
+            "thrown 20 ft",
+            "versatile s",
+        ],
         range_ft: None,
     },
     WeaponInfo {
@@ -252,17 +258,17 @@ static WEAPONS: &[WeaponInfo] = &[
     },
     WeaponInfo {
         name: "Whip",
-        traits: &["disarm", "nonlethal", "reach", "trip"],
+        traits: &["disarm", "finesse", "nonlethal", "reach", "trip"],
         range_ft: None,
     },
     WeaponInfo {
         name: "Kukri",
-        traits: &["agile", "trip"],
+        traits: &["agile", "finesse", "trip"],
         range_ft: None,
     },
     WeaponInfo {
         name: "Dueling Sword",
-        traits: &["disarm", "finesse"],
+        traits: &["finesse", "versatile p"],
         range_ft: None,
     },
     WeaponInfo {
@@ -287,8 +293,8 @@ static WEAPONS: &[WeaponInfo] = &[
     },
     WeaponInfo {
         name: "Dart",
-        traits: &["agile", "thrown 20 ft"],
-        range_ft: None,
+        traits: &["agile", "thrown"],
+        range_ft: Some(20),
     },
     WeaponInfo {
         name: "Javelin",
@@ -312,12 +318,12 @@ static WEAPONS: &[WeaponInfo] = &[
     },
     WeaponInfo {
         name: "Shortbow",
-        traits: &[],
+        traits: &["deadly d10"],
         range_ft: Some(60),
     },
     WeaponInfo {
         name: "Composite Shortbow",
-        traits: &["propulsive"],
+        traits: &["deadly d10", "propulsive"],
         range_ft: Some(60),
     },
 ];
