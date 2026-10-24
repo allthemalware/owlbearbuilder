@@ -25,13 +25,27 @@ fn parses_a_pathbuilder_shaped_document() {
 #[test]
 fn decodes_every_escape() {
     let v = JsonValue::parse(r#""q\" b\\ s\/ \b\f\n\r\t \u00e9 \uD83C\uDFB2 \uD800x""#).unwrap();
-    assert_eq!(v.as_str(), Some("q\" b\\ s/ \u{8}\u{c}\n\r\t é 🎲 \u{FFFD}x"));
+    assert_eq!(
+        v.as_str(),
+        Some("q\" b\\ s/ \u{8}\u{c}\n\r\t é 🎲 \u{FFFD}x")
+    );
 }
 
 #[test]
 fn parses_numbers() {
-    for (text, want) in [("0", 0.0), ("-1", -1.0), ("3.25", 3.25), ("-0.5e1", -5.0), ("1E+2", 100.0), ("2e-2", 0.02)] {
-        assert_eq!(JsonValue::parse(text).unwrap().as_f64(), Some(want), "{text}");
+    for (text, want) in [
+        ("0", 0.0),
+        ("-1", -1.0),
+        ("3.25", 3.25),
+        ("-0.5e1", -5.0),
+        ("1E+2", 100.0),
+        ("2e-2", 0.02),
+    ] {
+        assert_eq!(
+            JsonValue::parse(text).unwrap().as_f64(),
+            Some(want),
+            "{text}"
+        );
     }
     assert_eq!(JsonValue::parse("-7").unwrap().as_i64(), Some(-7));
     assert_eq!(JsonValue::parse("2.0").unwrap().as_i64(), Some(2));
@@ -39,7 +53,25 @@ fn parses_numbers() {
 
 #[test]
 fn rejects_malformed_input_with_position() {
-    for bad in ["", "{", "[1,]", "{\"a\":1,}", "01", "1.", ".5", "+1", "tru", "\"abc", "\"\\x\"", "\"a\nb\"", "{a:1}", "[1 2]", "1 2", "'a'", "NaN"] {
+    for bad in [
+        "",
+        "{",
+        "[1,]",
+        "{\"a\":1,}",
+        "01",
+        "1.",
+        ".5",
+        "+1",
+        "tru",
+        "\"abc",
+        "\"\\x\"",
+        "\"a\nb\"",
+        "{a:1}",
+        "[1 2]",
+        "1 2",
+        "'a'",
+        "NaN",
+    ] {
         assert!(JsonValue::parse(bad).is_err(), "accepted {bad:?}");
     }
     let err = JsonValue::parse("{\n  \"a\": tru\n}").unwrap_err();
