@@ -54,6 +54,7 @@
 //! - `"secret": true` marks the entry for the GM only.
 //! - `kind: "party"` + `"name"` (+ `"dc"`): `encounter::roll_party_secret_check` for every
 //!   character → `{"results": [entries]}`, all secret.
+//!
 //! Labels read like `Perception`, `Fortitude save`, `Athletics`, `Assurance (Athletics)`,
 //! `+1 Striking Longsword (2nd attack)`, `+1 Striking Longsword damage (critical)`,
 //! `Wizard spell attack`.
