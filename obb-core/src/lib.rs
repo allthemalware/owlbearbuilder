@@ -12,4 +12,6 @@ pub mod fs;
 pub mod import_pb;
 pub mod json;
 pub mod monster;
+pub mod spell_data;
+pub mod spells;
 pub mod weapons;
