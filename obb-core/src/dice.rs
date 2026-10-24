@@ -382,6 +382,7 @@ impl StrikeDamage {
     /// - deadly dX: the result is doubled, then deadly dice are added (not doubled): 1 die,
     ///   2 with 3 weapon dice (greater striking), 3 with 4 or more (major striking);
     /// - otherwise `2 × (sum(weapon_rolls) + flat_bonus)`.
+    ///
     /// A weapon with both traits applies fatal's die size, then both extra dice.
     ///
     /// Total is at least 1: Player Core says damage reduced below 1 still deals 1.

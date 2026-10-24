@@ -347,7 +347,7 @@ fn write_value(v: &JsonValue, out: &mut String, pretty: Option<usize>, depth: us
                     if i > 0 {
                         out.push(',')
                     }
-                    if let Some(_) = pretty {
+                    if pretty.is_some() {
                         out.push('\n');
                         out.push_str(&pad(depth + 1));
                     }
