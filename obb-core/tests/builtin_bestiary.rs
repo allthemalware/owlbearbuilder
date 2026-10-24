@@ -14,7 +14,7 @@ fn six_starter_creatures_parse() {
             "Goblin Warrior",
             "Orc Brute",
             "Skeleton Guard",
-            "Kobold Scout",
+            "Kobold Warrior",
             "Giant Rat",
             "Ogre Warrior"
         ]
