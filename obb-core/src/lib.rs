@@ -2,6 +2,8 @@
 //! Pathfinder 2e rules engine for Owlbear Rodeo: character import, conditions, checks, monsters, spell areas.
 
 pub mod aoe;
+pub mod bestiary;
+pub mod bestiary_data;
 pub mod character;
 pub mod conditions;
 pub mod dice;
