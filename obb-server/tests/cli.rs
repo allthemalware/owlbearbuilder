@@ -76,6 +76,16 @@ fn inspects_characters() {
         wiz.contains("Fireball") && wiz.contains("20-foot burst"),
         "{wiz}"
     );
+    // Level 5, Int +4: trained class DC 10 + 7 + 4; Arcana expert 9 + 4; Society trained 7 + 4.
+    for want in [
+        "Class DC 21",
+        "Arcana +13 (Expert)",
+        "Society +11 (Trained)",
+        "Wizard (arcane prepared, DC 21, attack +11)",
+    ] {
+        assert!(wiz.contains(want), "missing {want:?} in:\n{wiz}");
+    }
+    assert!(!wiz.contains("DC +"), "a DC is not a modifier:\n{wiz}");
     let missing = run(&["inspect", "/nonexistent/sheet.json"]);
     assert_eq!(missing.status.code(), Some(1));
     assert!(!missing.stderr.is_empty());
@@ -127,6 +137,29 @@ fn rolls_seeded_dice() {
         "seeded rolls repeat"
     );
     assert!(text.contains("1d20+14") && text.contains("DC 25"), "{text}");
+    // `<expr>: <each die> + <flat> = <total>`, then `DC <n>: <degree>`.
+    let first = text.lines().next().unwrap();
+    let (expr, rest) = first.split_once(": ").unwrap();
+    assert_eq!(expr, "1d20+14", "{text}");
+    let (sum, total) = rest.rsplit_once(" = ").unwrap();
+    let parts: Vec<i64> = sum
+        .split(" + ")
+        .map(|p| p.trim().parse().unwrap())
+        .collect();
+    assert_eq!((parts.len(), parts[1]), (2, 14), "{text}");
+    assert_eq!(
+        total
+            .split_whitespace()
+            .next()
+            .unwrap()
+            .parse::<i64>()
+            .unwrap(),
+        parts[0] + 14
+    );
+    assert!(
+        text.lines().nth(1).unwrap().starts_with("DC 25: "),
+        "{text}"
+    );
     assert!(
         ["Critical Success", "Success", "Failure", "Critical Failure"]
             .iter()
