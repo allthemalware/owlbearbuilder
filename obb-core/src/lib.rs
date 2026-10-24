@@ -9,6 +9,7 @@ pub mod conditions;
 pub mod dice;
 pub mod encounter;
 pub mod fs;
+pub mod import;
 pub mod import_pb;
 pub mod json;
 pub mod monster;
