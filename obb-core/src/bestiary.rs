@@ -75,8 +75,8 @@ pub fn weak_hp_penalty(level: i32) -> i32 {
 /// - Weak: level -1, or -2 when the base level is 1; the same numbers -2 (damage
 ///   `1d4+1` → `1d4-1`; the minimum of 1 damage is applied when rolling, not here); max HP -
 ///   `weak_hp_penalty`, never below 1.
+///
 /// The name and id stay the base creature's.
-#[allow(clippy::doc_lazy_continuation)]
 pub fn apply_variant(base: &MonsterStatBlock, variant: CreatureVariant) -> MonsterStatBlock {
     if variant == CreatureVariant::Normal {
         return base.clone();
