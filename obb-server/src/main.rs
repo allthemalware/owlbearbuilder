@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+mod cli;
+
 fn main() {
-    println!("owlbearbuilder {}", env!("CARGO_PKG_VERSION"));
+    std::process::exit(cli::run(std::env::args().skip(1).collect()));
 }
