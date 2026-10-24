@@ -8,4 +8,5 @@ pub mod encounter;
 pub mod fs;
 pub mod import_pb;
 pub mod json;
+pub mod monster;
 pub mod weapons;
