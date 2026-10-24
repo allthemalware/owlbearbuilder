@@ -1,0 +1,102 @@
+{
+    "success": true,
+    "build": {
+        "name": "Amiri Stormborn",
+        "class": "Fighter",
+        "level": 4,
+        "ancestry": "Human",
+        "heritage": "Versatile Human",
+        "background": "Warrior",
+        "sizeName": "Medium",
+        "keyability": "str",
+        "attributes": {
+            "ancestryhp": 8,
+            "classhp": 10,
+            "bonushp": 0,
+            "bonushpPerLevel": 0,
+            "speed": 25,
+            "speedBonus": 0
+        },
+        "abilities": {
+            "str": 18,
+            "dex": 14,
+            "con": 14,
+            "int": 10,
+            "wis": 12,
+            "cha": 10
+        },
+        "proficiencies": {
+            "classDC": 2,
+            "perception": 4,
+            "fortitude": 4,
+            "reflex": 4,
+            "will": 2,
+            "heavy": 2,
+            "medium": 2,
+            "light": 2,
+            "unarmored": 2,
+            "advanced": 2,
+            "martial": 6,
+            "simple": 6,
+            "unarmed": 6,
+            "athletics": 4,
+            "intimidation": 4,
+            "survival": 2
+        },
+        "feats": [
+            [
+                "Shield Block",
+                null,
+                "General Feat",
+                1
+            ],
+            [
+                "Power Attack",
+                null,
+                "Class Feat",
+                1
+            ]
+        ],
+        "specials": [
+            "Attack of Opportunity"
+        ],
+        "lores": [
+            [
+                "Warfare",
+                2
+            ]
+        ],
+        "mods": {},
+        "weapons": [
+            {
+                "name": "Longsword",
+                "display": "Longsword",
+                "die": "d8",
+                "str": "",
+                "attack": 14,
+                "damageBonus": 4,
+                "damageType": "S"
+            },
+            {
+                "name": "Shortsword",
+                "display": "Shortsword",
+                "die": "d6",
+                "str": "",
+                "attack": 14,
+                "damageBonus": 4,
+                "damageType": "P"
+            }
+        ],
+        "armor": [],
+        "spellCasters": [],
+        "focusPoints": 0,
+        "focus": {},
+        "acTotal": {
+            "acProfBonus": 6,
+            "acAbilityBonus": 2,
+            "acItemBonus": 0,
+            "acTotal": 18,
+            "shieldBonus": "2"
+        }
+    }
+}

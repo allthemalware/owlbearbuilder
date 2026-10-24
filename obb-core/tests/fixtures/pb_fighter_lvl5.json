@@ -1,0 +1,124 @@
+{
+    "success": true,
+    "build": {
+        "name": "Amiri Stormborn",
+        "class": "Fighter",
+        "level": 5,
+        "ancestry": "Human",
+        "heritage": "Versatile Human",
+        "background": "Warrior",
+        "sizeName": "Medium",
+        "keyability": "str",
+        "attributes": {
+            "ancestryhp": 8,
+            "classhp": 10,
+            "bonushp": 0,
+            "bonushpPerLevel": 0,
+            "speed": 25,
+            "speedBonus": 0
+        },
+        "abilities": {
+            "str": 18,
+            "dex": 14,
+            "con": 14,
+            "int": 10,
+            "wis": 12,
+            "cha": 10
+        },
+        "proficiencies": {
+            "classDC": 2,
+            "perception": 4,
+            "fortitude": 4,
+            "reflex": 4,
+            "will": 2,
+            "heavy": 2,
+            "medium": 2,
+            "light": 2,
+            "unarmored": 2,
+            "advanced": 2,
+            "martial": 6,
+            "simple": 6,
+            "unarmed": 6,
+            "athletics": 4,
+            "intimidation": 4,
+            "survival": 2
+        },
+        "feats": [
+            [
+                "Shield Block",
+                null,
+                "General Feat",
+                1
+            ],
+            [
+                "Power Attack",
+                null,
+                "Class Feat",
+                1
+            ],
+            [
+                "Untrained Improvisation",
+                null,
+                "General Feat",
+                3
+            ]
+        ],
+        "specials": [
+            "Attack of Opportunity"
+        ],
+        "lores": [
+            [
+                "Warfare",
+                2
+            ]
+        ],
+        "mods": {},
+        "weapons": [
+            {
+                "name": "Longsword",
+                "qty": 1,
+                "prof": "martial",
+                "die": "d8",
+                "pot": 1,
+                "str": "striking",
+                "mat": null,
+                "display": "+1 Striking Longsword",
+                "runes": [],
+                "damageType": "S",
+                "attack": 16,
+                "damageBonus": 4,
+                "extraDamage": [],
+                "increasedDice": false,
+                "isInventor": false
+            },
+            {
+                "name": "Shortsword",
+                "qty": 1,
+                "prof": "martial",
+                "die": "d6",
+                "pot": 0,
+                "str": "",
+                "mat": null,
+                "display": "Shortsword",
+                "runes": [],
+                "damageType": "P",
+                "attack": 15,
+                "damageBonus": 4,
+                "extraDamage": [],
+                "increasedDice": false,
+                "isInventor": false
+            }
+        ],
+        "armor": [],
+        "spellCasters": [],
+        "focusPoints": 0,
+        "focus": {},
+        "acTotal": {
+            "acProfBonus": 7,
+            "acAbilityBonus": 2,
+            "acItemBonus": 0,
+            "acTotal": 19,
+            "shieldBonus": "2"
+        }
+    }
+}
