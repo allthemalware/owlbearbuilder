@@ -227,6 +227,14 @@ fn enfeebled_hits_strength_attacks_and_damage() {
     assert_eq!(c.strike_attack_modifier(9, 0), None);
     assert!(c.strikes[1].is_agile());
     assert!(!c.strikes[0].is_agile());
+    // Frightened and Sickened hit the attack roll but not damage, which isn't a check.
+    c.conditions = vec![
+        Condition::Frightened(2),
+        Condition::Sickened(1),
+        Condition::Enfeebled(1),
+    ];
+    assert_eq!(c.strike_attack_modifier(0, 0), Some(14));
+    assert_eq!(c.strike_damage(0).unwrap().flat_bonus, 3);
 }
 
 #[test]
